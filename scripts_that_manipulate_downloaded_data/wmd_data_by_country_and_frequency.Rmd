@@ -1,0 +1,162 @@
+---
+title: "Mortality data by country and frequency"
+author: "Derek Burk"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Packages
+
+```{r}
+library(readr)
+library(dplyr)
+```
+
+# File paths
+
+```{r}
+wmd_data_path <- "../downloaded_data/wmd-2021-07-15.csv"
+```
+
+# Brauner et al. countries
+
+```{r}
+brauner_countries <- c(
+  "Albania", "Andorra", "Austria", "Belgium", "Bosnia and Herzegovina", 
+  "Bulgaria", "Croatia", "Czech Republic", "Denmark", "Estonia", "Finland", 
+  "France", "Georgia", "Germany", "Greece", "Hungary", "Iceland", "Ireland", 
+  "Israel", "Italy", "Latvia", "Lithuania", "Malaysia", "Malta", "Mexico", 
+  "Morocco", "Netherlands", "New Zealand", "Norway", "Poland", "Portugal", 
+  "Romania", "Serbia", "Singapore", "Slovakia", "Slovenia", "South Africa", 
+  "Spain", "Sweden", "Switzerland", "United Kingdom"
+)
+```
+
+
+# Load data
+
+```{r}
+wmd <- read_csv(
+  wmd_data_path,
+  col_types = cols(
+    country_name = col_character(),
+    year = col_double(),
+    time = col_double(),
+    time_unit = col_character(),
+    deaths = col_double()
+  )
+)
+```
+
+# Reconcile country names
+
+```{r}
+setdiff(brauner_countries, wmd$country_name)
+```
+It looks like Bosnia and Herzegovina and Czech Republic are in the WMD dataset 
+under different names, but Morocco does not appear to be in the WMD dataset.
+I'll rename the countries in the WMD data for the sake of comparison:
+
+```{r}
+wmd <- wmd %>% 
+  mutate(
+    country_name = case_when(
+      country_name == "Bosnia" ~ "Bosnia and Herzegovina",
+      country_name == "Czechia" ~ "Czech Republic",
+      TRUE ~ country_name
+    )
+  )
+```
+
+
+
+# All time units
+
+```{r}
+unique(wmd$time_unit)
+```
+
+
+# Countries with weekly data 2015-2020
+
+```{r}
+countries_with_complete_weekly_data <- wmd %>% 
+  filter(time_unit == "weekly" & year %in% 2015:2020) %>% 
+  group_by(country_name, year) %>% 
+  summarize(has_all_weeks = all(1:52 %in% time), .groups = "drop") %>% 
+  group_by(country_name) %>% 
+  summarize(for_all_years = all(has_all_weeks), .groups = "drop") %>% 
+  filter(for_all_years) %>% 
+  pull(country_name) %>% 
+  sort()
+countries_with_complete_weekly_data
+```
+
+# Countries with monthly data 2015-2020
+
+```{r}
+countries_with_complete_monthly_data <- wmd %>% 
+  filter(time_unit == "monthly" & year %in% 2015:2020) %>% 
+  group_by(country_name, year) %>% 
+  summarize(has_all_months = all(1:12 %in% time), .groups = "drop") %>% 
+  group_by(country_name) %>% 
+  summarize(for_all_years = all(has_all_months), .groups = "drop") %>% 
+  filter(for_all_years) %>% 
+  pull(country_name) %>% 
+  sort()
+countries_with_complete_monthly_data
+```
+
+# Countries with quarterly data 2015-2020
+
+```{r}
+countries_with_complete_quarterly_data <- wmd %>% 
+  filter(time_unit %in% c("quarterly", "quarterly (Solar Hijri)") & 
+           year %in% 2015:2020) %>% 
+  group_by(country_name, year) %>% 
+  summarize(has_all_quarters = all(1:4 %in% time), .groups = "drop") %>% 
+  group_by(country_name) %>% 
+  summarize(for_all_years = all(has_all_quarters), .groups = "drop") %>% 
+  filter(for_all_years) %>% 
+  pull(country_name) %>% 
+  sort()
+countries_with_complete_quarterly_data
+```
+
+# Countries that don't have complete weekly, monthly, or quarterly data
+
+```{r}
+countries_with_incomplete_data <- setdiff(
+  unique(wmd$country_name), 
+  unique(
+    c(
+      countries_with_complete_weekly_data, 
+      countries_with_complete_monthly_data,
+      countries_with_complete_quarterly_data
+    )
+  )
+)
+countries_with_incomplete_data
+```
+
+# Countries with complete monthly or weekly data
+
+```{r}
+countries_with_complete_data <- 
+  c(countries_with_complete_weekly_data, countries_with_complete_monthly_data) %>% 
+  unique() %>% 
+  sort()
+countries_with_complete_data
+```
+
+Do all the Brauner et al. countries have complete monthly or weekly mortality 
+data?
+
+```{r}
+setdiff(brauner_countries, countries_with_complete_data)
+```
+
+Yes, with the exception of Morocco, which isn't part of the WMD.

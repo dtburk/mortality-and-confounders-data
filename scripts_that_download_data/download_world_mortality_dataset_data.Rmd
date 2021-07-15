@@ -1,0 +1,23 @@
+---
+title: "Download WMD data"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+This script downloads data from the 
+[World Mortality Dataset](https://github.com/akarlinsky/world_mortality) and 
+saves it to the "downloaded_data" directory. The date at the top of the .html 
+version of this file indicates the last time the data were downloaded.
+
+```{r}
+library(readr)
+data_url <- "https://raw.githubusercontent.com/akarlinsky/world_mortality/main/world_mortality.csv"
+data <- read_csv(data_url)
+names(data)[[1]] <- "country_name"
+if (!dir.exists("../downloaded_data")) dir.create("../downloaded_data")
+write_csv(
+  data, 
+  path = paste0("../downloaded_data/wmd-", Sys.Date(), ".csv")
+)
+```
+
