@@ -3,6 +3,8 @@
 This repository contains R code to download country-level data on confounders 
 to be used in analysis of excess mortality during the COVID19 pandemic.
 
+The file "countrylist.csv" lists the countries to be included in our analysis.
+
 The folder "scripts_that_download_data" contains RMarkdown files with code to 
 download the following data:
 
