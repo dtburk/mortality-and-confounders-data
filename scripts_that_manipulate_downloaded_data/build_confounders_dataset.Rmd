@@ -1,0 +1,252 @@
+---
+title: "Build confounders dataset"
+author: "Derek Burk"
+date: "9/24/2021"
+output: html_document
+---
+
+
+# Packages
+
+```{r}
+library(dplyr)
+library(readr)
+library(rlang)
+library(gt)
+```
+
+
+# File paths
+
+These file paths have to start with ".." because the working directory is set 
+to the directory in which this RMarkdown file is saved 
+("scripts_that_manipulate_downloaded_data").
+
+```{r}
+countrylist_path <- "../countrylist.csv"
+age_dist_path <- "../downloaded_data/age-dist-2021-07-16.csv"
+gdp_path <- "../downloaded_data/gdp-growth-world-bank-2021-09-24.csv"
+gini_path <- "../downloaded_data/gini-world-bank-2021-09-24.csv"
+life_expectancy_path <- 
+  "../downloaded_data/life-expectancy-world-bank-2021-09-24.csv"
+maternal_mortality_path <- 
+  "../downloaded_data/maternal-mortality-world-bank-2021-09-24.csv"
+poverty_path <- "downloaded_data/poverty-world-bank-2021-07-15.csv"
+under_5_mortality_path <- 
+  "../downloaded_data/under-5-mortality-world-bank-2021-07-16.csv"
+```
+
+
+# Country list
+
+```{r}
+countrylist <- read_csv(
+  countrylist_path,
+  col_names = c("row_num", "country"),
+  col_types = cols(row_num = col_skip(), country = col_character()),
+  skip = 1
+)
+```
+
+
+# Function to match country names
+
+```{r}
+match_country_names <- function(country_names) {
+  
+  no_match <- sort(setdiff(countrylist$country, country_names))
+  
+  if (length(no_match) == 0) {
+    cat("All countries matched!")
+  } else {
+    warning(
+      paste0("No match for:\n\n", paste0(no_match, collapse = "\n")),
+      call. = FALSE
+    )
+  }
+  
+}
+```
+
+
+
+# Age distribution
+
+```{r}
+age_dist <- read_csv(
+  age_dist_path,
+  col_types = cols(
+    LocID = col_double(),
+    Location = col_character(),
+    VarID = col_double(),
+    Variant = col_character(),
+    Time = col_double(),
+    MidPeriod = col_double(),
+    AgeGrp = col_character(),
+    AgeGrpStart = col_double(),
+    AgeGrpSpan = col_double(),
+    PopMale = col_double(),
+    PopFemale = col_double(),
+    PopTotal = col_double()
+  )
+)
+```
+
+## Reconcile country names
+
+```{r}
+match_country_names(age_dist$Location)
+```
+
+
+```{r}
+age_dist <- age_dist %>% 
+  rename(country = Location) %>% 
+  mutate(
+    country = recode(
+      country,
+      "United Kingdom" = "Britain",
+      "Czechia" = "Czech Republic",
+      "Dem. People's Republic of Korea" = "South Korea",
+      "United States of America" = "United States"
+    )
+  )
+
+match_country_names(age_dist$country)
+```
+## Filter down to countries in analysis
+
+```{r}
+age_dist_subset <- age_dist %>% 
+  inner_join(countrylist, by = "country")
+```
+
+## Filter down to most recent year (no later than 2019):
+
+```{r}
+age_dist_subset <- age_dist_subset %>% 
+  filter(Time < 2020) %>% 
+  group_by(country) %>% 
+  mutate(most_recent_year = max(Time, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  filter(Time == most_recent_year)
+```
+
+Distribution of most recent year:
+
+```{r}
+age_dist_subset %>% 
+  distinct(country, most_recent_year) %>% 
+  count(most_recent_year)
+```
+
+
+## Create indices
+
+Create percent over 65 and old-age dependency indices:
+
+```{r}
+age_indicators <- age_dist_subset %>% 
+  rename(year = Time) %>% 
+  group_by(country, year) %>% 
+  summarize(
+    percent_over_65 = 
+      100 * sum(PopTotal[AgeGrpStart >= 65]) / sum(PopTotal),
+    old_age_dependency = 
+      100 * sum(PopTotal[AgeGrpStart >= 65]) / sum(PopTotal[AgeGrpStart < 65]),
+    .groups = "drop"
+  )
+
+age_indicators %>% 
+  arrange(desc(percent_over_65)) %>% 
+  mutate(across(c(percent_over_65, old_age_dependency), ~round(.x, 1))) %>% 
+  gt() %>% 
+  tab_header(
+    title = "% over 65 and old-age dependency ratio", 
+    subtitle = "Descending order by % over 65"
+  )
+```
+
+
+# GDP growth
+
+```{r}
+gdp <- read_csv(
+  gdp_path,
+  col_types = cols(
+    iso2c = col_character(),
+    country = col_character(),
+    NY.GDP.PCAP.KD.ZG = col_double(),
+    year = col_double(),
+    iso3c = col_character(),
+    region = col_character(),
+    capital = col_character(),
+    longitude = col_double(),
+    latitude = col_double(),
+    income = col_character(),
+    lending = col_character()
+  )
+)
+```
+
+## Reconcile country names
+
+```{r}
+match_country_names(gdp$country)
+```
+
+```{r}
+gdp <- gdp %>% 
+  mutate(
+    country = recode(
+      country,
+      "United Kingdom" = "Britain",
+      "Slovak Republic" = "Slovakia",
+      "Korea, Rep." = "South Korea"
+    )
+  )
+
+match_country_names(gdp$country)
+```
+
+## Filter down to countries in analysis
+
+```{r}
+gdp_subset <- gdp %>% 
+  inner_join(countrylist, by = "country")
+```
+
+## Subset to relevant variables
+
+```{r}
+gdp_subset <- gdp_subset %>% 
+  select(country, year, gdp_growth_rate = NY.GDP.PCAP.KD.ZG)
+```
+
+
+
+Not sure if we want to take an average over a certain time period here?
+
+
+# Gini coefficient
+
+```{r}
+gini <- read_csv(
+  gini_path,
+  col_types = cols(
+    iso2c = col_character(),
+    country = col_character(),
+    SI.POV.GINI = col_double(),
+    year = col_double(),
+    iso3c = col_character(),
+    region = col_character(),
+    capital = col_character(),
+    longitude = col_double(),
+    latitude = col_double(),
+    income = col_character(),
+    lending = col_character()
+  )
+)
+```
+
+

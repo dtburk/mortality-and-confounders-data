@@ -1,0 +1,246 @@
+---
+title: "Which countries have data on confounders?"
+author: "Derek Burk"
+date: "7/16/2021"
+output: html_document
+---
+
+# Setup
+
+## Packages
+
+```{r}
+suppressPackageStartupMessages({
+  library(rnaturalearth)
+  library(rnaturalearthdata)
+  library(ggplot2)
+  library(dplyr)
+  library(readr)
+  library(stringr)
+})
+```
+
+
+## File paths
+
+```{r}
+data_dir <- "../downloaded_data"
+wmd_path <- file.path(data_dir, "wmd-2021-07-15.csv")
+poverty_path <- file.path(data_dir, "poverty-world-bank-2021-07-15.csv")
+age_path <- file.path(data_dir, "age-dist-2021-07-16.csv")
+child_mortality_path <- file.path(
+  data_dir, 
+  "under-5-mortality-world-bank-2021-07-16.csv"
+)
+```
+
+
+# Load data
+
+```{r}
+wmd <- read_csv(
+  wmd_path,
+  col_types = cols(
+    country_name = col_character(),
+    year = col_double(),
+    time = col_double(),
+    time_unit = col_character(),
+    deaths = col_double()
+  )
+)
+poverty <- read_csv(
+  poverty_path,
+  col_types = cols(
+    iso2c = col_character(),
+    country = col_character(),
+    SI.POV.DDAY = col_double(),
+    year = col_double(),
+    iso3c = col_character(),
+    region = col_character(),
+    capital = col_character(),
+    longitude = col_double(),
+    latitude = col_double(),
+    income = col_character(),
+    lending = col_character()
+  )
+)
+age <- read_csv(
+  age_path,
+  col_types = cols(
+    LocID = col_double(),
+    Location = col_character(),
+    VarID = col_double(),
+    Variant = col_character(),
+    Time = col_double(),
+    MidPeriod = col_double(),
+    AgeGrp = col_character(),
+    AgeGrpStart = col_double(),
+    AgeGrpSpan = col_double(),
+    PopMale = col_double(),
+    PopFemale = col_double(),
+    PopTotal = col_double()
+  )
+)
+child_mortality <- read_csv(
+  child_mortality_path,
+  col_types = cols(
+    iso2c = col_character(),
+    country = col_character(),
+    SH.DYN.MORT = col_double(),
+    year = col_double(),
+    iso3c = col_character(),
+    region = col_character(),
+    capital = col_character(),
+    longitude = col_double(),
+    latitude = col_double(),
+    income = col_character(),
+    lending = col_character()
+  )
+)
+```
+
+# Brauner et al. countries
+
+```{r}
+brauner_countries <- c(
+  "Albania", "Andorra", "Austria", "Belgium", "Bosnia and Herzegovina", 
+  "Bulgaria", "Croatia", "Czech Republic", "Denmark", "Estonia", "Finland", 
+  "France", "Georgia", "Germany", "Greece", "Hungary", "Iceland", "Ireland", 
+  "Israel", "Italy", "Latvia", "Lithuania", "Malaysia", "Malta", "Mexico", 
+  "Morocco", "Netherlands", "New Zealand", "Norway", "Poland", "Portugal", 
+  "Romania", "Serbia", "Singapore", "Slovakia", "Slovenia", "South Africa", 
+  "Spain", "Sweden", "Switzerland", "United Kingdom"
+)
+```
+
+
+# Which countries have enough data?
+
+## Mortality
+
+Fix country names to match Brauner:
+
+```{r}
+wmd <- wmd %>% 
+  mutate(
+    country_name = case_when(
+      country_name == "Bosnia" ~ "Bosnia and Herzegovina",
+      country_name == "Czechia" ~ "Czech Republic",
+      TRUE ~ country_name
+    )
+  )
+```
+
+```{r}
+countries_with_complete_weekly_data <- wmd %>% 
+  filter(time_unit == "weekly" & year %in% 2015:2020) %>% 
+  group_by(country_name, year) %>% 
+  summarize(has_all_weeks = all(1:52 %in% time), .groups = "drop") %>% 
+  group_by(country_name) %>% 
+  summarize(for_all_years = all(has_all_weeks), .groups = "drop") %>% 
+  filter(for_all_years) %>% 
+  pull(country_name) %>% 
+  sort()
+countries_with_complete_monthly_data <- wmd %>% 
+  filter(time_unit == "monthly" & year %in% 2015:2020) %>% 
+  group_by(country_name, year) %>% 
+  summarize(has_all_months = all(1:12 %in% time), .groups = "drop") %>% 
+  group_by(country_name) %>% 
+  summarize(for_all_years = all(has_all_months), .groups = "drop") %>% 
+  filter(for_all_years) %>% 
+  pull(country_name) %>% 
+  sort()
+countries_with_complete_mortality_data <- c(
+  countries_with_complete_weekly_data, countries_with_complete_monthly_data
+) %>% 
+  unique() %>% 
+  sort()
+```
+
+
+## Poverty
+
+```{r}
+country_level_poverty_data <- poverty %>% 
+  filter(region != "Aggregates") %>% 
+  filter(!is.na(SI.POV.DDAY)) 
+```
+
+Fix names to match Brauner list:
+
+```{r}
+country_level_poverty_data <- country_level_poverty_data %>% 
+  mutate(
+    country = case_when(
+      country == "Slovak Republic" ~ "Slovakia",
+      TRUE ~ country
+    )
+  )
+```
+
+What is the most recent year of data available by country?
+
+```{r}
+countries_by_year_of_most_recent_data <- country_level_poverty_data %>% 
+  group_by(country) %>% 
+  summarize(most_recent_year = max(year), .groups = "drop") %>% 
+  arrange(desc(most_recent_year), country)
+```
+
+
+```{r}
+countries_by_year_of_most_recent_data %>% 
+  count(most_recent_year) %>% 
+  arrange(desc(most_recent_year)) %>% 
+  mutate(cumulative_n = cumsum(n))
+```
+
+Looking at the table above, if we included countries with data from 2016 or 
+more recent, that would give us 101 countries.
+
+```{r}
+countries_with_poverty_data <- countries_by_year_of_most_recent_data %>% 
+  filter(most_recent_year >= 2016) %>% 
+  pull(country) %>% 
+  sort()
+```
+
+
+## Age structure
+
+```{r}
+age %>% 
+  filter(AgeGrpStart >= 65 & Time %in% 2010:2020) %>% 
+  rename(country = Location, year = Time) %>% 
+  group_by(country, year) %>% 
+  summarize(complete = !any(is.na(PopTotal)), .groups = "drop") %>% 
+  group_by(country) %>% 
+  summarize(most_recent_year = max(year), .groups = "drop") %>% 
+  arrange(desc(most_recent_year), country)
+```
+
+
+
+# Child mortality
+
+
+
+# Map the Brauner countries
+
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+```
+
+```{r}
+world %>% 
+  mutate(is_a_brauner_country = name_long %in% brauner_countries) %>% 
+  count(is_a_brauner_country)
+```
+
+
+```{r}
+ggplot(data = world) +
+  geom_sf()
+```
+

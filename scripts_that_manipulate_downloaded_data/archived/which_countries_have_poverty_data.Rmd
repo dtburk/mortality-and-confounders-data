@@ -1,0 +1,131 @@
+---
+title: "Which countries have poverty data?"
+author: "Derek Burk"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Packages
+
+```{r}
+library(readr)
+library(stringr)
+library(DT)
+library(dplyr)
+```
+
+# File paths
+
+```{r}
+poverty_data_path <- "../downloaded_data/poverty-world-bank-2021-07-15.csv"
+```
+
+# Brauner et al. countries
+
+```{r}
+brauner_countries <- c(
+  "Albania", "Andorra", "Austria", "Belgium", "Bosnia and Herzegovina", 
+  "Bulgaria", "Croatia", "Czech Republic", "Denmark", "Estonia", "Finland", 
+  "France", "Georgia", "Germany", "Greece", "Hungary", "Iceland", "Ireland", 
+  "Israel", "Italy", "Latvia", "Lithuania", "Malaysia", "Malta", "Mexico", 
+  "Morocco", "Netherlands", "New Zealand", "Norway", "Poland", "Portugal", 
+  "Romania", "Serbia", "Singapore", "Slovakia", "Slovenia", "South Africa", 
+  "Spain", "Sweden", "Switzerland", "United Kingdom"
+)
+```
+
+
+# Load data
+
+```{r}
+poverty_data <- read_csv(
+  poverty_data_path,
+  col_types = cols(
+    iso2c = col_character(),
+    country = col_character(),
+    SI.POV.DDAY = col_double(),
+    year = col_double(),
+    iso3c = col_character(),
+    region = col_character(),
+    capital = col_character(),
+    longitude = col_double(),
+    latitude = col_double(),
+    income = col_character(),
+    lending = col_character()
+  )
+)
+```
+
+```{r}
+country_level_poverty_data <- poverty_data %>% 
+  filter(str_detect(iso2c, "^[A-Z]{2}$")) %>% 
+  filter(!is.na(SI.POV.DDAY)) 
+```
+
+
+# Reconcile country names
+
+```{r}
+setdiff(
+  brauner_countries, 
+  country_level_poverty_data$country
+)
+```
+It looks like Slovakia is just called "Slovak Republic" in the World Bank
+poverty dataset, but Andorra, New Zealand, and Singapore don't have any
+non-missing data in the poverty dataset. I'll rename Slovakia in the
+poverty data for the sake of comparison:
+
+```{r}
+country_level_poverty_data <- country_level_poverty_data %>% 
+  mutate(
+    country = case_when(
+      country == "Slovak Republic" ~ "Slovakia",
+      TRUE ~ country
+    )
+  )
+```
+
+
+# Which countries have poverty data?
+
+```{r}
+countries_by_year_of_most_recent_data <- country_level_poverty_data %>% 
+  group_by(country) %>% 
+  summarize(most_recent_year = max(year), .groups = "drop") %>% 
+  arrange(desc(most_recent_year), country)
+
+countries_by_year_of_most_recent_data %>% datatable()
+```
+
+
+```{r}
+countries_by_year_of_most_recent_data %>% 
+  count(most_recent_year) %>% 
+  arrange(desc(most_recent_year)) %>% 
+  mutate(cumulative_n = cumsum(n))
+```
+
+What about Brauner countries specifically?
+
+
+```{r}
+brauner_countries_by_year_of_most_recent_data <- country_level_poverty_data %>% 
+  filter(country %in% brauner_countries) %>% 
+  group_by(country) %>% 
+  summarize(most_recent_year = max(year), .groups = "drop") %>% 
+  arrange(desc(most_recent_year), country)
+
+brauner_countries_by_year_of_most_recent_data %>% datatable()
+```
+
+
+```{r}
+brauner_countries_by_year_of_most_recent_data %>% 
+  count(most_recent_year) %>% 
+  arrange(desc(most_recent_year)) %>% 
+  mutate(cumulative_n = cumsum(n))
+```

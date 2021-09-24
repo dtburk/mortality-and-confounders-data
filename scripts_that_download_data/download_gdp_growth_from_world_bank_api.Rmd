@@ -1,0 +1,28 @@
+---
+title: "Download GDP per capita growth from World Bank API"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Packages
+
+```{r}
+library(WDI)
+library(readr)
+```
+
+# GDP per capita growth
+
+From https://data.worldbank.org/indicator/NY.GDP.PCAP.KD.ZG?view=chart :
+
+World Bank national accounts data, and OECD National Accounts data files.
+
+```{r}
+gdp_growth <- WDI(indicator = "NY.GDP.PCAP.KD.ZG", start = 2010, end = 2020, 
+                    extra = TRUE)
+if (!dir.exists("../downloaded_data")) dir.create("../downloaded_data")
+write_csv(
+  gdp_growth, 
+  path = paste0("../downloaded_data/gdp-growth-world-bank-", Sys.Date(), ".csv")
+)
+```

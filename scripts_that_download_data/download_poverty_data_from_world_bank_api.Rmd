@@ -1,0 +1,34 @@
+---
+title: "Download poverty data from World Bank API"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Packages
+
+```{r}
+library(WDI)
+library(readr)
+```
+
+
+# Poverty headcount data
+
+From https://data.worldbank.org/indicator/SI.POV.DDAY?view=chart :
+
+Data are based on primary household survey data obtained from government
+statistical agencies and World Bank country departments. Data for high-income
+economies are from the Luxembourg Income Study database. For more information
+and methodology, please see PovcalNet (
+iresearch.worldbank.org/PovcalNet/home.aspx )
+
+```{r}
+poverty_data <- WDI(indicator = "SI.POV.DDAY", start = 2010, end = 2020, 
+                    extra = TRUE)
+if (!dir.exists("../downloaded_data")) dir.create("../downloaded_data")
+write_csv(
+  poverty_data, 
+  path = paste0("../downloaded_data/poverty-world-bank-", Sys.Date(), ".csv")
+)
+```
+
